@@ -166,6 +166,7 @@ tr:last-child td{border-bottom:0}
     <button data-p="sip" aria-selected="false">SIP</button>
     <button data-p="emi" aria-selected="false">EMI</button>
     <button data-p="swp" aria-selected="false">SWP</button>
+    <button data-p="tv" aria-selected="false">Terminal value</button>
     <button data-p="amort" aria-selected="false">Amortisation</button>
     <button data-p="cf" aria-selected="false">Cash flow · NPV · IRR</button>
     <button data-p="bond" aria-selected="false">Bond</button>
@@ -383,6 +384,25 @@ tr:last-child td{border-bottom:0}
     <div class="lcd" id="w_out"><div class="l"><span>Ready</span><span>—</span></div></div>
     <div id="w_tbl"></div>
   </div>
+
+  <!-- TERMINAL VALUE -->
+  <div class="card" data-panel="tv" hidden>
+    <h2>Terminal value of a stock</h2>
+    <p class="hint">Grows today's per-share earnings (or free cash flow) for n years, then values the stock two ways: at an exit P/E, and by the Gordon growth formula. Both are discounted back to today and set against the current price.</p>
+    <div class="grid2">
+      <div class="f"><label>Current EPS or FCF per share</label><input id="v_e" type="text" inputmode="decimal" value="50"></div>
+      <div class="f"><label>Current market price</label><input id="v_p" type="text" inputmode="decimal" value="1000"></div>
+      <div class="f"><label>Growth % p.a. for n years</label><input id="v_g" type="text" inputmode="decimal" value="15"></div>
+      <div class="f"><label>Years n</label><input id="v_n" type="text" inputmode="decimal" value="10"></div>
+      <div class="f"><label>Exit P/E at year n</label><input id="v_pe" type="text" inputmode="decimal" value="20"></div>
+      <div class="f"><label>Terminal growth % after n</label><input id="v_gt" type="text" inputmode="decimal" value="6"></div>
+      <div class="f"><label>Discount rate % (required return)</label><input id="v_r" type="text" inputmode="decimal" value="12"></div>
+      <div class="f"><label>Dividend payout %</label><input id="v_d" type="text" inputmode="decimal" value="20"></div>
+    </div>
+    <div class="row"><button class="btn primary" id="v_go">Calculate</button><button class="btn" id="v_tbl_btn">Year by year</button></div>
+    <div class="lcd" id="v_out"><div class="l"><span>Ready</span><span>—</span></div></div>
+    <div id="v_tbl"></div>
+  </div>
 </section>
 
 <!-- ============================ STATISTICS ============================ -->
@@ -391,6 +411,7 @@ tr:last-child td{border-bottom:0}
     <button data-p="s1" aria-selected="true">One variable</button>
     <button data-p="s2" aria-selected="false">Two variables · regression</button>
     <button data-p="s3" aria-selected="false">Probability</button>
+    <button data-p="s4" aria-selected="false">Power series</button>
   </div>
 
   <div class="card" data-panel="s1">
@@ -450,6 +471,19 @@ tr:last-child td{border-bottom:0}
     <div class="f" style="margin-top:10px"><label>Left tail probability p</label><input id="n_p" type="text" inputmode="decimal" value="0.95"></div>
     <div class="row"><button class="btn" id="n_inv">p → x</button></div>
     <div class="lcd" id="n_out"><div class="l"><span>Ready</span><span>—</span></div></div>
+  </div>
+
+  <div class="card" data-panel="s4" hidden>
+    <h2>Sum of powers — x¹ + x² + … + xⁿ</h2>
+    <p class="hint">Geometric series. Choose "x⁰" to include the leading 1. When x lies between −1 and 1 the infinite sum is shown too.</p>
+    <div class="grid2">
+      <div class="f"><label>x</label><input id="g_x" type="text" inputmode="decimal" value="2"></div>
+      <div class="f"><label>n — highest power</label><input id="g_n" type="text" inputmode="decimal" value="10"></div>
+      <div class="f"><label>Start from</label><select id="g_s"><option value="1">x¹</option><option value="0">x⁰ (include 1)</option></select></div>
+    </div>
+    <div class="row"><button class="btn primary" id="g_go">Calculate</button><button class="btn" id="g_tbl_btn">Show terms</button></div>
+    <div class="lcd" id="g_out"><div class="l"><span>Ready</span><span>—</span></div></div>
+    <div id="g_tbl"></div>
   </div>
 </section>
 
@@ -1079,6 +1113,104 @@ $("w_go").addEventListener("click",()=>{
 $("w_tbl_btn").addEventListener("click",()=>{
   const r=swpRun(); if(!r) return err("w_out","Enter a corpus and a monthly withdrawal.");
   table("w_tbl",["Year","Monthly draw","Cumulative drawn","Balance"],r.yearly.slice(0,60));
+});
+
+/* ---------- terminal value ---------- */
+function tvRun(){
+  const e0=num("v_e"), price=num("v_p"), g=num("v_g")/100, n=Math.round(num("v_n")),
+        pe=num("v_pe"), gt=num("v_gt")/100, r=num("v_r")/100, pay=num("v_d")/100;
+  if(n<1) return {err:"Years must be at least one."};
+  if(e0<=0) return {err:"Enter a positive EPS or FCF per share."};
+  const rows=[]; let pvDiv=0, sumDiv=0, sumE=0, pvE=0;
+  for(let t=1;t<=n;t++){
+    const et=e0*Math.pow(1+g,t), d=et*pay, df=Math.pow(1+r,t);
+    pvDiv+=d/df; sumDiv+=d; sumE+=et; pvE+=et/df;
+    rows.push([String(t),fmt(et,2),fmt(sumE,2),fmt(d,2),fmt(sumDiv,2),fmt(d/df,2)]);
+  }
+  const en=e0*Math.pow(1+g,n), dfn=Math.pow(1+r,n);
+  const gordonOK=r>gt;
+  return {e0,price,g,n,pe,gt,r,pay,en,dfn,tvPE:en*pe,tvG:gordonOK?en*(1+gt)/(r-gt):NaN,gordonOK,pvDiv,sumDiv,sumE,pvE,rows};
+}
+$("v_go").addEventListener("click",()=>{
+  const v=tvRun(); if(v.err) return err("v_out",v.err);
+  const ivPE=v.tvPE/v.dfn+v.pvDiv, ivG=v.gordonOK?v.tvG/v.dfn+v.pvDiv:NaN;
+  const cagr=tv=>v.price>0?(Math.pow((tv+v.sumDiv)/v.price,1/v.n)-1)*100:NaN;
+  const out=[
+    ["Earnings at year "+v.n],
+    ["EPS / FCF in year n", fmt(v.en,2)],
+    ["Growth multiple", fmt(v.en/v.e0,2)+"×"],
+    ["Sum of EPS, years 1 to n", fmt(v.sumE,2)],
+    ["Sum of EPS, worth today", fmt(v.pvE,2)],
+    ["Sum of EPS ÷ current price", v.price>0?fmt(v.sumE/v.price,2)+"×":"—"],
+    ["Dividends collected over n years", fmt(v.sumDiv,2)],
+    ["Terminal value — exit P/E "+fmt(v.pe,1)],
+    ["Price in year n", fmt(v.tvPE,2)],
+    ["Worth today at "+fmt(v.r*100,1)+"%", fmt(v.tvPE/v.dfn,2)],
+    ["Intrinsic value incl. dividends", fmt(ivPE,2)],
+    ["Your CAGR at current price", fmt(cagr(v.tvPE),2)+"%"],
+    ["Terminal value — Gordon growth "+fmt(v.gt*100,1)+"%"]
+  ];
+  if(v.gordonOK){
+    out.push(["Price in year n", fmt(v.tvG,2)]);
+    out.push(["Implied exit P/E", fmt(v.tvG/v.en,2)]);
+    out.push(["Worth today", fmt(v.tvG/v.dfn,2)]);
+    out.push(["Intrinsic value incl. dividends", fmt(ivG,2)]);
+    out.push(["Your CAGR at current price", fmt(cagr(v.tvG),2)+"%"]);
+  } else out.push(["Gordon value","discount rate must exceed terminal growth"]);
+  if(v.price>0){
+    out.push(["Against the current price"]);
+    out.push(["Current P/E", fmt(v.price/v.e0,2)]);
+    out.push(["Margin of safety, P/E route", fmt((ivPE-v.price)/ivPE*100,2)+"%"]);
+    if(v.gordonOK) out.push(["Margin of safety, Gordon", fmt((ivG-v.price)/ivG*100,2)+"%"]);
+    const f=gg=>{ let pv=0; for(let t=1;t<=v.n;t++) pv+=v.e0*Math.pow(1+gg,t)*v.pay/Math.pow(1+v.r,t);
+      return pv+v.e0*Math.pow(1+gg,v.n)*v.pe/v.dfn-v.price; };
+    let lo=-0.9,hi=3,ig=NaN;
+    if(f(lo)*f(hi)<0){ for(let k=0;k<200;k++){ const m=(lo+hi)/2; if(f(lo)*f(m)<=0) hi=m; else lo=m; } ig=(lo+hi)/2; }
+    out.push(["Growth the price implies", isFinite(ig)?fmt(ig*100,2)+"% p.a.":"—"]);
+  }
+  show("v_out",out); $("v_tbl").innerHTML="";
+});
+$("v_tbl_btn").addEventListener("click",()=>{
+  const v=tvRun(); if(v.err) return err("v_out",v.err);
+  table("v_tbl",["Year","EPS / FCF","Cum. EPS","Dividend","Cum. dividend","PV of dividend"],v.rows);
+});
+
+/* ---------- geometric power series ---------- */
+function geoRun(){
+  const x=val("g_x"), n=Math.round(num("g_n")), s0=parseInt($("g_s").value,10);
+  if(x===null) return {err:"Enter x."};
+  if(n<s0) return {err:"n must be at least "+s0+"."};
+  const terms=n-s0+1;
+  const S=(x===1)?terms:(Math.pow(x,n+1)-Math.pow(x,s0))/(x-1);
+  return {x,n,s0,terms,S};
+}
+$("g_go").addEventListener("click",()=>{
+  const v=geoRun(); if(v.err) return err("g_out",v.err);
+  const rows=[
+    ["Σ x^k, k = "+v.s0+" to "+v.n],
+    ["Sum", fmt(v.S,6)],
+    ["Number of terms", String(v.terms)],
+    ["Last term xⁿ", fmt(Math.pow(v.x,v.n),6)],
+    ["Formula", v.x===1?"n × 1":"(x^(n+1) − x^"+v.s0+") / (x − 1)"]
+  ];
+  if(Math.abs(v.x)<1){
+    const inf=v.s0===0?1/(1-v.x):v.x/(1-v.x);
+    rows.push(["As n → ∞"]);
+    rows.push(["Infinite sum", fmt(inf,6)]);
+    rows.push(["Share reached by n", fmt(v.S/inf*100,4)+"%"]);
+  }
+  if(v.x>0&&v.x<1&&v.s0===1){
+    rows.push(["Finance link"]);
+    rows.push(["Equals annuity factor at rate %", fmt((1/v.x-1)*100,4)]);
+  }
+  show("g_out",rows); $("g_tbl").innerHTML="";
+});
+$("g_tbl_btn").addEventListener("click",()=>{
+  const v=geoRun(); if(v.err) return err("g_out",v.err);
+  if(v.terms>500) return err("g_out","More than 500 terms — the sum is fine, the table would be too long.");
+  const rows=[]; let run=0;
+  for(let k=v.s0;k<=v.n;k++){ const t=Math.pow(v.x,k); run+=t; rows.push([String(k),fmt(t,6),fmt(run,6)]); }
+  table("g_tbl",["k","x^k","Running sum"],rows);
 });
 
 function parse1(){
